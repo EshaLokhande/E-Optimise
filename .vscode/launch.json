@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run E-Optimise Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/extension/e-optimise"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/extension/e-optimise/out/**/*.js"
+      ],
+      "preLaunchTask": "npm: compile (e-optimise)"
+    }
+  ]
+}

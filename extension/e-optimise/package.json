@@ -15,9 +15,18 @@
     "commands": [
       {
         "command": "e-optimise.helloWorld",
-        "title": "Hello World"
+        "title": "E-Optimise: Analyze & Optimize Code"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "e-optimise.helloWorld",
+          "group": "navigation",
+          "when": "editorHasSelection"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
