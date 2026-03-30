@@ -5,17 +5,19 @@ require('dotenv').config({ quiet: true });
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Middleware: allow cross-origin requests and JSON request bodies.
 app.use(cors());
 app.use(express.json());
 
-// Health check
+// Quick endpoint to verify that backend is alive.
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'E OPTIMISE server running!' });
 });
 
-// Big-O Analysis
+// Analyze code time/space complexity using AI.
 app.post('/api/complexity', async (req, res) => {
   const { code, language } = req.body;
+  // Reject empty input early.
   if (!code) return res.status(400).json({ error: 'No code provided' });
   try {
     const result = await analyzeComplexity(code, language || 'javascript');
@@ -25,7 +27,7 @@ app.post('/api/complexity', async (req, res) => {
   }
 });
 
-// Visualise
+// Generate a Mermaid flowchart description for the input code.
 app.post('/api/visualise', async (req, res) => {
   const { code, language } = req.body;
   if (!code) return res.status(400).json({ error: 'No code provided' });
@@ -37,7 +39,7 @@ app.post('/api/visualise', async (req, res) => {
   }
 });
 
-// Optimise
+// Suggest optimized code and explain improvements.
 app.post('/api/optimise', async (req, res) => {
   const { code, language } = req.body;
   if (!code) return res.status(400).json({ error: 'No code provided' });
@@ -49,7 +51,7 @@ app.post('/api/optimise', async (req, res) => {
   }
 });
 
-// AI functions
+// Shared OpenAI helper used by all API routes.
 
 async function callOpenAI(systemPrompt, userPrompt) {
   const key = process.env.OPENAI_API_KEY;
@@ -72,6 +74,7 @@ async function callOpenAI(systemPrompt, userPrompt) {
   });
 
   if (!response.ok) {
+    // Include upstream error payload so API clients can debug quickly.
     const text = await response.text();
     throw new Error(`OpenAI API error ${response.status}: ${text}`);
   }
@@ -85,6 +88,7 @@ async function callOpenAI(systemPrompt, userPrompt) {
 }
 
 async function analyzeComplexity(code, language) {
+  // We force strict JSON so the frontend can parse safely.
   const system = `You are an algorithm expert. Analyze code complexity.
 Return ONLY valid JSON, no markdown:
 {
@@ -99,6 +103,7 @@ Return ONLY valid JSON, no markdown:
 }
 
 async function generateDiagram(code, language) {
+  // Mermaid text is returned as JSON, not rendered server-side.
   const system = `You are a code visualization expert.
 Return ONLY valid JSON, no markdown:
 {
@@ -111,6 +116,7 @@ Return ONLY valid JSON, no markdown:
 }
 
 async function optimizeCode(code, language) {
+  // Ask the model for both code output and complexity comparison.
   const system = `You are a code optimization expert.
 Return ONLY valid JSON, no markdown:
 {
@@ -124,7 +130,7 @@ Return ONLY valid JSON, no markdown:
   catch { throw new Error('AI returned invalid response'); }
 }
 
-// Start server
+// Start HTTP server and print useful local URLs.
 app.listen(PORT, () => {
   console.log('E OPTIMISE backend running');
   console.log(`http://localhost:${PORT}`);

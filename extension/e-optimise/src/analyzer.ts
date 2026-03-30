@@ -1,139 +1,104 @@
+import * as https from 'https';
+import * as http from 'http';
+
+// Shared shape used by the extension UI.
+// Not every field is filled by every endpoint.
 export interface CodeAnalysis {
-	bigO: string;
-	timeComplexity: string;
-	spaceComplexity: string;
-	patterns: string[];
-	suggestions: string[];
-	visualization: string;
+    bigO: string;
+    timeComplexity: string;
+    spaceComplexity: string;
+    patterns: string[];
+    suggestions: string[];
+    visualization: string;
+    mermaidCode?: string;
+    optimisedCode?: string;
+    improvements?: string[];
 }
 
-export function analyzeCode(code: string): CodeAnalysis {
-	const patterns: string[] = [];
-	const suggestions: string[] = [];
-	let timeComplexity = 'O(1)';
-	let spaceComplexity = 'O(1)';
-	let visualization = '';
+// Generic HTTP helper for backend endpoints.
+// Flow: selected code -> local backend -> OpenAI -> JSON response back to extension.
+async function callBackend(endpoint: string, code: string, language: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+        const data = JSON.stringify({ code, language });
 
-	// Normalize code
-	const normalized = code.toLowerCase();
+        // Local backend settings.
+        const options = {
+            hostname: 'localhost',
+            port: 3001,
+            path: endpoint,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
 
-	// Detect nested loops (O(n²), O(n³), etc.) - improved detection
-	const forLoops = (code.match(/\bfor\s*\(/gi) || []).length;
-	const whileLoops = (code.match(/\bwhile\s*\(/gi) || []).length;
-	const doWhileLoops = (code.match(/\bdo\b/gi) || []).length;
-	const totalLoops = forLoops + whileLoops + doWhileLoops;
+        // Send POST request and collect streamed response chunks.
+        const req = http.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                try {
+                    resolve(JSON.parse(body));
+                } catch {
+                    reject(new Error('Invalid response from server'));
+                }
+            });
+        });
 
-	if (totalLoops > 0) {
-		patterns.push(`Found ${totalLoops} loop(s)`);
-		if (totalLoops === 1) {
-			timeComplexity = 'O(n)';
-			patterns.push('Single loop - Linear time');
-		} else if (totalLoops === 2) {
-			timeComplexity = 'O(n²)';
-			patterns.push('Nested loops - Quadratic time');
-			suggestions.push('Consider using a hash map or set to avoid nested loops');
-		} else if (totalLoops >= 3) {
-			timeComplexity = `O(n${totalLoops})`;
-			patterns.push(`${totalLoops} nested loops - Polynomial time`);
-			suggestions.push('Multiple nested loops detected - consider divide & conquer or dynamic programming');
-		}
-	}
+        // Usually means backend is not running or port is blocked.
+        req.on('error', () => {
+            reject(new Error('Cannot connect to backend. Is server.js running?'));
+        });
 
-	// Detect recursion
-	if (normalized.includes('return') && code.includes('(')) {
-		const funcNameMatch = code.match(/function\s+(\w+)|const\s+(\w+)\s*=/);
-		if (funcNameMatch) {
-			const funcName = funcNameMatch[1] || funcNameMatch[2];
-			if (code.includes(funcName + '(')) {
-				patterns.push('Recursive call detected');
-				if (!normalized.includes('memo') && !normalized.includes('cache')) {
-					suggestions.push('Add memoization to cache results and avoid redundant calculations');
-					timeComplexity = 'O(2^n) - Consider memoization for O(n)';
-				} else {
-					patterns.push('Memoization detected');
-					timeComplexity = 'O(n) - With memoization';
-				}
-			}
-		}
-	}
+        req.write(data);
+        req.end();
+    });
+}
 
-	// Detect sort operations
-	if (normalized.includes('sort')) {
-		patterns.push('Sort operation detected');
-		timeComplexity = 'O(n log n)';
-		spaceComplexity = 'O(log n) to O(n)';
-	}
+export async function analyzeCode(code: string, language: string = 'javascript'): Promise<CodeAnalysis> {
+    // /api/complexity returns time/space complexity and suggestions.
+    const result = await callBackend('/api/complexity', code, language);
+    return {
+        // Keep bigO for backward compatibility with older UI formatting.
+        bigO: result.timeComplexity || 'O(n)',
+        timeComplexity: result.timeComplexity || 'O(n)',
+        spaceComplexity: result.spaceComplexity || 'O(1)',
+        patterns: [],
+        suggestions: result.suggestions || [],
+        visualization: result.explanation || ''
+    };
+}
 
-	// Detect array/object operations
-	if (normalized.includes('.filter') || normalized.includes('.map') || normalized.includes('.reduce')) {
-		patterns.push('Higher-order functions detected');
-		if (timeComplexity === 'O(1)') {
-			timeComplexity = 'O(n)';
-		}
-	}
+export async function generateDiagram(code: string, language: string = 'javascript'): Promise<CodeAnalysis> {
+    // /api/visualise returns Mermaid graph + human explanation.
+    const result = await callBackend('/api/visualise', code, language);
+    return {
+        bigO: '',
+        timeComplexity: '',
+        spaceComplexity: '',
+        patterns: [],
+        suggestions: [],
+        visualization: result.explanation || '',
+        mermaidCode: result.mermaidCode || ''
+    };
+}
 
-	// Detect binary search
-	if (normalized.includes('binary') || (normalized.includes('left') && normalized.includes('right') && normalized.includes('mid'))) {
-		patterns.push('Binary search detected');
-		timeComplexity = 'O(log n)';
-		visualization = 'Binary search: Dividing search space in half each iteration';
-	}
-
-	// Space complexity detection
-	if (normalized.includes('new array') || normalized.includes('[]') || normalized.includes('{}')) {
-		const declarations = (code.match(/new\s+Array|new\s+Object|\[\s*\]|\{\s*\}/g) || []).length;
-		if (declarations > 1) {
-			spaceComplexity = 'O(n)';
-			suggestions.push('Multiple data structures allocated - high space complexity');
-		}
-	}
-
-	// Generate visualization
-	if (visualization === '') {
-		if (totalLoops > 0) {
-			visualization = `Loop execution: Iterates through input ${totalLoops === 1 ? 'once' : `${totalLoops} times nested`}`;
-		} else if (patterns.some(p => p.includes('Recursive'))) {
-			visualization = 'Recursive call tree - Each call branches into sub-calls';
-		} else if (patterns.some(p => p.includes('Binary'))) {
-			visualization = 'Binary tree traversal - Logarithmic depth';
-		} else {
-			visualization = 'Linear execution through function body';
-		}
-	}
-
-	// Add general suggestions
-	if (suggestions.length === 0) {
-		if (timeComplexity.includes('n²')) {
-			suggestions.push('Try using a hash table or set for O(1) lookups instead of nested loops');
-		} else if (timeComplexity.includes('2^n')) {
-			suggestions.push('Use memoization or dynamic programming to improve performance');
-		}
-	}
-
-	return {
-		bigO: timeComplexity,
-		timeComplexity,
-		spaceComplexity,
-		patterns,
-		suggestions,
-		visualization
-	};
+export async function optimizeCode(code: string, language: string = 'javascript'): Promise<CodeAnalysis> {
+    // /api/optimise returns suggested improvements and optimized code.
+    const result = await callBackend('/api/optimise', code, language);
+    return {
+        bigO: '',
+        timeComplexity: '',
+        spaceComplexity: '',
+        patterns: [],
+        suggestions: result.improvements || [],
+        visualization: '',
+        optimisedCode: result.optimisedCode || ''
+    };
 }
 
 export function generateOptimizationCode(code: string): string {
-	const analysis = analyzeCode(code);
-	let optimized = code;
-
-	// Suggest optimizations based on patterns
-	if (analysis.bigO.includes('n²')) {
-		optimized += '\n\n// Optimized version using Set/Map:\n';
-		optimized += '// Replace nested loop with hash-based lookup for O(n) time complexity';
-	}
-
-	if (analysis.patterns.some(p => p.includes('Recursive'))) {
-		optimized += '\n\n// Memoization Pattern:\n';
-		optimized += 'const memo = {};\nfunction optimized(n) {\n  if (n in memo) return memo[n];\n  // ... your logic ...\n  memo[n] = result;\n  return result;\n}';
-	}
-
-	return optimized;
+    // Placeholder: currently returns original input unchanged.
+    return code;
 }
