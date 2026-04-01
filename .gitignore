@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Environment variables (contains sensitive API keys)
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# IDE and editor files
+.vscode/
+.idea/
+*.suo
+*.sln
+*.swp
+*.swo
+*.swn
+*~
+.project
+.classpath
+.c9/
+*.cer
+*.csr
+*.jks
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime/temporary files
+*.pid
+*.seed
+/*.log
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.cache/
+.turbo/

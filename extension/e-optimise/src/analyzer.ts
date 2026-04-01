@@ -1,4 +1,3 @@
-import * as https from 'https';
 import * as http from 'http';
 
 // Shared shape used by the extension UI.
@@ -39,8 +38,27 @@ async function callBackend(endpoint: string, code: string, language: string): Pr
             res.on('data', chunk => body += chunk);
             res.on('end', () => {
                 try {
-                    resolve(JSON.parse(body));
+                    const parsed = JSON.parse(body);
+                    const statusCode = res.statusCode || 500;
+
+                    // Surface backend/OpenAI failures instead of returning empty defaults.
+                    if (statusCode >= 400) {
+                        reject(new Error(parsed.error || `Backend error ${statusCode}`));
+                        return;
+                    }
+
+                    if (parsed.error) {
+                        reject(new Error(parsed.error));
+                        return;
+                    }
+
+                    resolve(parsed);
                 } catch {
+                    const statusCode = res.statusCode || 500;
+                    if (statusCode >= 400) {
+                        reject(new Error(`Backend error ${statusCode}: ${body}`));
+                        return;
+                    }
                     reject(new Error('Invalid response from server'));
                 }
             });
