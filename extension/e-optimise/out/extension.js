@@ -7,7 +7,7 @@ var __createBinding = (this && this.__createBinding) || (Object.create ? (functi
     }
     Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
+    if (k2 === undefined) k2 = o;
     o[k2] = m[k];
 }));
 var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
@@ -39,9 +39,7 @@ const vscode = __importStar(require("vscode"));
 const analyzer_1 = require("./analyzer");
 function activate(context) {
     // Register the command declared in package.json.
-    // This callback runs when user chooses "E-Optimise: Analyze & Optimize Code".
     let disposable = vscode.commands.registerCommand('e-optimise.helloWorld', async () => {
-        // Read current editor and currently selected code.
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
             vscode.window.showErrorMessage('No editor active!');
@@ -52,62 +50,56 @@ function activate(context) {
             vscode.window.showErrorMessage('Please select a function first!');
             return;
         }
-        // Pass editor language to backend so prompts can be language-aware.
         const language = editor.document.languageId;
-        // Ask user which action they want for the selected code.
-        const choice = await vscode.window.showQuickPick(['⚡ Visualise Function', '📊 Get Big-O Notation', '🔧 Optimise Function'], { placeHolder: 'What do you want to do?' });
+        const choice = await vscode.window.showQuickPick([
+            { label: '$(lightbulb) Visualise Function', description: 'Generate a Mermaid flowchart of the selected code' },
+            { label: '$(symbol-ruler) Get Big-O Notation', description: 'Analyze time & space complexity' },
+            { label: '$(tools) Optimise Function', description: 'Get suggestions and improved code' }
+        ], { placeHolder: 'What do you want to do?' });
         if (!choice)
             return;
-        // Show loading message
-        vscode.window.showInformationMessage('⏳ Analysing with AI...');
+        vscode.window.showInformationMessage('\u23f3 Analysing with AI...');
         try {
-            if (choice === '⚡ Visualise Function') {
-                // Request Mermaid diagram + explanation from backend.
+            if (choice.label === '$(lightbulb) Visualise Function') {
                 const result = await (0, analyzer_1.generateDiagram)(selectedText, language);
                 showPanel(selectedText, result.visualization, result.mermaidCode || '', 'Visualization');
             }
-            if (choice === '📊 Get Big-O Notation') {
-                // Request complexity analysis and shape it into readable text.
+            if (choice.label === '$(symbol-ruler) Get Big-O Notation') {
                 const result = await (0, analyzer_1.analyzeCode)(selectedText, language);
                 const analysis = [
-                    `⏱️ Time Complexity: ${result.timeComplexity}`,
-                    `💾 Space Complexity: ${result.spaceComplexity}`,
+                    `\u23f1\ufe0f Time Complexity: ${result.timeComplexity}`,
+                    `\ud83d\udcbe Space Complexity: ${result.spaceComplexity}`,
                     ``,
-                    `📖 Explanation: ${result.visualization}`,
+                    `\ud83d\udcd6 Explanation: ${result.visualization}`,
                     ``,
-                    `💡 Suggestions:`,
-                    ...result.suggestions.map(s => `  • ${s}`)
+                    `\ud83d\udca1 Suggestions:`,
+                    ...result.suggestions.map(s => `  \u2022 ${s}`)
                 ].join('\n');
                 showPanel(selectedText, analysis, '', 'Big-O Analysis');
             }
-            if (choice === '🔧 Optimise Function') {
-                // Request optimization suggestions and possible improved code.
+            if (choice.label === '$(tools) Optimise Function') {
                 const result = await (0, analyzer_1.optimizeCode)(selectedText, language);
                 const analysis = [
-                    `💡 Improvements:`,
-                    ...result.suggestions.map(s => `  • ${s}`),
+                    `\ud83d\udca1 Improvements:`,
+                    ...result.suggestions.map(s => `  \u2022 ${s}`),
                     ``,
-                    `✨ Optimised Code:`,
+                    `\u2728 Optimised Code:`,
                     result.optimisedCode || 'No optimisation needed!'
                 ].join('\n');
                 showPanel(selectedText, analysis, '', 'Optimisation');
             }
         }
         catch (error) {
-            // Surface backend/network/model errors in VS Code UI.
             vscode.window.showErrorMessage(`Error: ${error.message}`);
         }
     });
     context.subscriptions.push(disposable);
 }
 function showPanel(original, analysis, mermaidCode, title) {
-    // Open webview beside the current editor.
     const panel = vscode.window.createWebviewPanel('e-optimise-analysis', `E-Optimise: ${title}`, vscode.ViewColumn.Beside, { enableScripts: true });
-    // Inject HTML content with escaped code/analysis.
     panel.webview.html = getWebviewContent(original, analysis, mermaidCode, title);
 }
 function getWebviewContent(code, analysis, mermaidCode, title) {
-    // Mermaid library renders flowchart text returned by backend.
     return `<!DOCTYPE html>
 	<html>
 	<head>
@@ -122,7 +114,7 @@ function getWebviewContent(code, analysis, mermaidCode, title) {
 		<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 	</head>
 	<body>
-		<h1>⚡ ${title}</h1>
+		<h1>\u26a1 ${title}</h1>
 		<h2>Your Code:</h2>
 		<div class="code">${escapeHtml(code)}</div>
 		<h2>Analysis:</h2>
@@ -133,7 +125,6 @@ function getWebviewContent(code, analysis, mermaidCode, title) {
 	</html>`;
 }
 function escapeHtml(text) {
-    // Prevent HTML/script injection when showing user-selected code.
     return text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')

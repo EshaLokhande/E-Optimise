@@ -23,45 +23,49 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// Ask user which action they want for the selected code.
 		const choice = await vscode.window.showQuickPick(
-			['⚡ Visualise Function', '📊 Get Big-O Notation', '🔧 Optimise Function'],
+			[
+				{ label: '$(lightbulb) Visualise Function', description: 'Generate a Mermaid flowchart of the selected code' },
+				{ label: '$(symbol-ruler) Get Big-O Notation', description: 'Analyze time & space complexity' },
+				{ label: '$(tools) Optimise Function', description: 'Get suggestions and improved code' }
+			],
 			{ placeHolder: 'What do you want to do?' }
 		);
 
 		if (!choice) return;
 
 		// Show loading message
-		vscode.window.showInformationMessage('⏳ Analysing with AI...');
+		vscode.window.showInformationMessage('\u23f3 Analysing with AI...');
 
 		try {
-			if (choice === '⚡ Visualise Function') {
+			if (choice.label === '$(lightbulb) Visualise Function') {
 				// Request Mermaid diagram + explanation from backend.
 				const result = await generateDiagram(selectedText, language);
 				showPanel(selectedText, result.visualization, result.mermaidCode || '', 'Visualization');
 			}
 
-			if (choice === '📊 Get Big-O Notation') {
+			if (choice.label === '$(symbol-ruler) Get Big-O Notation') {
 				// Request complexity analysis and shape it into readable text.
 				const result = await analyzeCode(selectedText, language);
 				const analysis = [
-					`⏱️ Time Complexity: ${result.timeComplexity}`,
-					`💾 Space Complexity: ${result.spaceComplexity}`,
+					`\u23f1\ufe0f Time Complexity: ${result.timeComplexity}`,
+					`\ud83d\udcbe Space Complexity: ${result.spaceComplexity}`,
 					``,
-					`📖 Explanation: ${result.visualization}`,
+					`\ud83d\udcd6 Explanation: ${result.visualization}`,
 					``,
-					`💡 Suggestions:`,
-					...result.suggestions.map(s => `  • ${s}`)
+					`\ud83d\udca1 Suggestions:`,
+					...result.suggestions.map(s => `  \u2022 ${s}`)
 				].join('\n');
 				showPanel(selectedText, analysis, '', 'Big-O Analysis');
 			}
 
-			if (choice === '🔧 Optimise Function') {
+			if (choice.label === '$(tools) Optimise Function') {
 				// Request optimization suggestions and possible improved code.
 				const result = await optimizeCode(selectedText, language);
 				const analysis = [
-					`💡 Improvements:`,
-					...result.suggestions.map(s => `  • ${s}`),
+					`\ud83d\udca1 Improvements:`,
+					...result.suggestions.map(s => `  \u2022 ${s}`),
 					``,
-					`✨ Optimised Code:`,
+					`\u2728 Optimised Code:`,
 					result.optimisedCode || 'No optimisation needed!'
 				].join('\n');
 				showPanel(selectedText, analysis, '', 'Optimisation');
@@ -104,7 +108,7 @@ function getWebviewContent(code: string, analysis: string, mermaidCode: string, 
 		<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 	</head>
 	<body>
-		<h1>⚡ ${title}</h1>
+		<h1>\u26a1 ${title}</h1>
 		<h2>Your Code:</h2>
 		<div class="code">${escapeHtml(code)}</div>
 		<h2>Analysis:</h2>
