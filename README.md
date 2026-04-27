@@ -1,23 +1,18 @@
 # E-Optimise
 
-A VS Code extension that analyzes, visualizes, and optimizes selected code using AI (Gemini).
+A VS Code extension that analyzes, visualizes, and optimizes your code using AI (Gemini/OpenAI).
 
 ## Features
 
-**Visualise Function** — Generate a Mermaid flowchart of your selected code to understand its logic visually.
+- **Visualise Function** — Generate a Mermaid flowchart of your selected code
+- **Get Big-O Notation** — Time & space complexity analysis with suggestions
+- **Optimise Function** — Get optimized code with complexity comparison
+- **Analyze Entire File** — Right-click in editor → "E-Optimise: Analyze Entire File"
+- **Copy buttons** — Copy code or analysis results to clipboard
+- **Status bar progress** — See analysis status in VS Code status bar
+- **Syntax highlighted** code panels in the webview
 
-**Get Big-O Notation** — Analyze time and space complexity with explanations and improvement suggestions.
-
-**Optimise Function** — Get optimized code with a comparison of complexity before/after.
-
-## How It Works
-
-1. Select a function/code block in VS Code
-2. Right-click → **E-Optimise: Analyze & Optimize Code**
-3. Choose an action from the quick pick menu
-4. Results appear in a side panel
-
-The extension sends your code to a local backend server, which uses the Gemini API for AI-powered analysis. A local fallback is used when the API is unavailable.
+All features work with AI (Gemini) and fall back to local heuristics when offline.
 
 ## Setup
 
@@ -25,29 +20,46 @@ The extension sends your code to a local backend server, which uses the Gemini A
 
 ```bash
 cd backend
-cp .env.example .env  # Add your GEMINI_API_KEY
+cp .env.example .env
+# Edit .env — add your GEMINI_API_KEY
 npm install
 npm start
 ```
 
-The backend runs on `http://localhost:3001`.
+Backend runs on `http://localhost:3001`.
 
 ### 2. Extension
 
-Open the `extension/e-optimise/` folder in VS Code, run `npm install`, then press F5 to launch a new VS Code window with the extension loaded.
+```bash
+cd extension/e-optimise
+npm install
+# Press F5 in VS Code to launch with extension loaded
+```
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GEMINI_API_KEY` | Yes | Google Gemini API key |
-| `GEMINI_MODEL` | No | Model name (default: gemini-2.5-flash) |
-| `AI_PROVIDER` | No | Set to `gemini` (default), `openai`, or `local` |
-| `OPENAI_API_KEY` | For OpenAI | Only needed if AI_PROVIDER=openai |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GEMINI_API_KEY` | — | **Required** for AI features |
+| `AI_PROVIDER` | `gemini` | `gemini`, `openai`, or `local`/`free` |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
+| `OPENAI_API_KEY` | — | Needed if `AI_PROVIDER=openai` |
+| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model name |
+| `AI_TIMEOUT` | `15000` | Backend API timeout (ms) |
+| `PORT` | `3001` | Backend port |
+
+## Usage
+
+1. Open any code file in VS Code
+2. Select a function/code block
+3. Right-click → **E-Optimise: Analyze & Optimize Code**
+4. Or use **E-Optimise: Analyze Entire File** for whole-file analysis
+5. Results open in a side panel with copy buttons
 
 ## Tech Stack
 
-- **Frontend:** VS Code Extension (TypeScript)
-- **Backend:** Node.js, Express
-- **AI:** Google Gemini API
+- **Extension:** VS Code API (TypeScript)
+- **Backend:** Node.js, Express 5
+- **AI:** Google Gemini API (primary), OpenAI (optional)
+- **Fallback:** Local heuristic analysis (no API needed)
 - **Visualization:** Mermaid.js

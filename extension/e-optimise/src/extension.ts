@@ -2,10 +2,8 @@ import * as vscode from 'vscode';
 import { analyzeCode, generateDiagram, optimizeCode } from './analyzer';
 
 export function activate(context: vscode.ExtensionContext) {
-	// Register the command declared in package.json.
-	// This callback runs when user chooses "E-Optimise: Analyze & Optimize Code".
+	// Command: analyze selected code
 	let disposable = vscode.commands.registerCommand('e-optimise.helloWorld', async () => {
-		// Read current editor and currently selected code.
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
 			vscode.window.showErrorMessage('No editor active!');
@@ -18,109 +16,198 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		// Pass editor language to backend so prompts can be language-aware.
 		const language = editor.document.languageId;
-
-		// Ask user which action they want for the selected code.
-		const choice = await vscode.window.showQuickPick(
-			[
-				{ label: '$(lightbulb) Visualise Function', description: 'Generate a Mermaid flowchart of the selected code' },
-				{ label: '$(symbol-ruler) Get Big-O Notation', description: 'Analyze time & space complexity' },
-				{ label: '$(tools) Optimise Function', description: 'Get suggestions and improved code' }
-			],
-			{ placeHolder: 'What do you want to do?' }
-		);
-
-		if (!choice) return;
-
-		// Show loading message
-		vscode.window.showInformationMessage('\u23f3 Analysing with AI...');
-
-		try {
-			if (choice.label === '$(lightbulb) Visualise Function') {
-				// Request Mermaid diagram + explanation from backend.
-				const result = await generateDiagram(selectedText, language);
-				showPanel(selectedText, result.visualization, result.mermaidCode || '', 'Visualization');
-			}
-
-			if (choice.label === '$(symbol-ruler) Get Big-O Notation') {
-				// Request complexity analysis and shape it into readable text.
-				const result = await analyzeCode(selectedText, language);
-				const analysis = [
-					`\u23f1\ufe0f Time Complexity: ${result.timeComplexity}`,
-					`\ud83d\udcbe Space Complexity: ${result.spaceComplexity}`,
-					``,
-					`\ud83d\udcd6 Explanation: ${result.visualization}`,
-					``,
-					`\ud83d\udca1 Suggestions:`,
-					...result.suggestions.map(s => `  \u2022 ${s}`)
-				].join('\n');
-				showPanel(selectedText, analysis, '', 'Big-O Analysis');
-			}
-
-			if (choice.label === '$(tools) Optimise Function') {
-				// Request optimization suggestions and possible improved code.
-				const result = await optimizeCode(selectedText, language);
-				const analysis = [
-					`\ud83d\udca1 Improvements:`,
-					...result.suggestions.map(s => `  \u2022 ${s}`),
-					``,
-					`\u2728 Optimised Code:`,
-					result.optimisedCode || 'No optimisation needed!'
-				].join('\n');
-				showPanel(selectedText, analysis, '', 'Optimisation');
-			}
-
-		} catch (error: any) {
-			// Surface backend/network/model errors in VS Code UI.
-			vscode.window.showErrorMessage(`Error: ${error.message}`);
-		}
+		await handleAnalysis(selectedText, language);
 	});
 
-	context.subscriptions.push(disposable);
+	// Command: analyze entire file
+	let fileDisposable = vscode.commands.registerCommand('e-optimise.analyzeFile', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showErrorMessage('No editor active!');
+			return;
+		}
+
+		const fullText = editor.document.getText();
+		const language = editor.document.languageId;
+		const lineCount = editor.document.lineCount;
+
+		await handleAnalysis(fullText, language, {
+			metrics: `Lines: ${lineCount} | Language: ${language}`
+		});
+	});
+
+	context.subscriptions.push(disposable, fileDisposable);
 }
 
-function showPanel(original: string, analysis: string, mermaidCode: string, title: string) {
-	// Open webview beside the current editor.
+async function handleAnalysis(
+	code: string,
+	language: string,
+	extra?: { metrics?: string }
+) {
+	const choice = await vscode.window.showQuickPick(
+		[
+			{ label: '$(lightbulb) Visualise Function', description: 'Generate a Mermaid flowchart of the selected code' },
+			{ label: '$(symbol-ruler) Get Big-O Notation', description: 'Analyze time & space complexity' },
+			{ label: '$(tools) Optimise Function', description: 'Get suggestions and improved code' }
+		],
+		{ placeHolder: 'What do you want to do?' }
+	);
+
+	if (!choice) return;
+
+	// Show progress in the VS Code status bar
+	const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+	statusItem.text = '$(sync~spin) E-Optimise: Analysing...';
+	statusItem.tooltip = 'Analysing code with AI';
+	statusItem.show();
+
+	try {
+		if (choice.label === '$(lightbulb) Visualise Function') {
+			const result = await generateDiagram(code, language);
+			showPanel(code, result.visualization, result.mermaidCode || '', 'Visualization', extra);
+		}
+
+		if (choice.label === '$(symbol-ruler) Get Big-O Notation') {
+			const result = await analyzeCode(code, language);
+			const analysis = [
+				`\u23f1\ufe0f Time Complexity: ${result.timeComplexity}`,
+				`\ud83d\udcbe Space Complexity: ${result.spaceComplexity}`,
+				``,
+				`\ud83d\udcd6 Explanation: ${result.visualization}`,
+				``,
+				`\ud83d\udca1 Suggestions:`,
+				...result.suggestions.map(s => `  \u2022 ${s}`)
+			].join('\n');
+			showPanel(code, analysis, '', 'Big-O Analysis', extra);
+		}
+
+		if (choice.label === '$(tools) Optimise Function') {
+			const result = await optimizeCode(code, language);
+			const analysis = [
+				`\ud83d\udca1 Improvements:`,
+				...result.suggestions.map(s => `  \u2022 ${s}`),
+				``,
+				`\u2728 Optimised Code:`,
+				result.optimisedCode || 'No optimisation needed!'
+			].join('\n');
+			showPanel(code, analysis, '', 'Optimisation', extra);
+		}
+
+	} catch (error: any) {
+		vscode.window.showErrorMessage(`E-Optimise Error: ${error.message}`);
+	} finally {
+		statusItem.dispose();
+	}
+}
+
+function showPanel(
+	original: string,
+	analysis: string,
+	mermaidCode: string,
+	title: string,
+	extra?: { metrics?: string }
+) {
 	const panel = vscode.window.createWebviewPanel(
 		'e-optimise-analysis',
 		`E-Optimise: ${title}`,
 		vscode.ViewColumn.Beside,
 		{ enableScripts: true }
 	);
-	// Inject HTML content with escaped code/analysis.
-	panel.webview.html = getWebviewContent(original, analysis, mermaidCode, title);
+	panel.webview.html = getWebviewContent(original, analysis, mermaidCode, title, extra);
+
+	// Handle messages from webview (copy button)
+	panel.webview.onDidReceiveMessage(
+		message => {
+			if (message.command === 'copy') {
+				vscode.env.clipboard.writeText(message.text);
+				vscode.window.showInformationMessage('Copied to clipboard!');
+			}
+		},
+		undefined,
+		[]
+	);
 }
 
-function getWebviewContent(code: string, analysis: string, mermaidCode: string, title: string): string {
-	// Mermaid library renders flowchart text returned by backend.
+function getWebviewContent(
+	code: string,
+	analysis: string,
+	mermaidCode: string,
+	title: string,
+	extra?: { metrics?: string }
+): string {
+	const escapedCode = escapeHtml(code);
+	const escapedAnalysis = escapeHtml(analysis);
+	const metricsHtml = extra?.metrics
+		? `<div class="metrics">${escapeHtml(extra.metrics)}</div>`
+		: '';
+
 	return `<!DOCTYPE html>
 	<html>
 	<head>
 		<meta charset="UTF-8">
+		<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src https://cdn.jsdelivr.net; img-src data:;">
 		<style>
-			body { font-family: sans-serif; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
-			h1 { color: #4ec9b0; border-bottom: 2px solid #007acc; padding-bottom: 10px; }
-			h2 { color: #9cdcfe; margin-top: 20px; }
-			.code { background: #252526; border-left: 3px solid #007acc; padding: 12px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; }
-			.analysis { background: #2d2d30; padding: 15px; border-radius: 4px; white-space: pre-wrap; }
+			body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #1e1e1e; color: #d4d4d4; line-height: 1.6; }
+			h1 { color: #4ec9b0; border-bottom: 2px solid #007acc; padding-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+			h2 { color: #9cdcfe; margin-top: 24px; display: flex; align-items: center; gap: 6px; }
+			.metrics { background: #2d2d30; padding: 8px 14px; border-radius: 4px; font-size: 13px; color: #888; margin-bottom: 16px; }
+			.code { background: #252526; border-left: 4px solid #569cd6; padding: 16px; border-radius: 4px; font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace; font-size: 13px; white-space: pre-wrap; overflow-x: auto; }
+			.analysis { background: #2d2d30; padding: 16px; border-radius: 4px; white-space: pre-wrap; font-size: 14px; }
+			.toolbar { display: flex; gap: 8px; margin: 12px 0; }
+			.toolbar button { background: #0e639c; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+			.toolbar button:hover { background: #1177bb; }
+			.loading { display: none; text-align: center; padding: 40px; }
+			.loading .spinner { border: 3px solid #333; border-top: 3px solid #4ec9b0; border-radius: 50%; width: 32px; height: 32px; margin: 0 auto 12px; }
+			@keyframes spin { to { transform: rotate(360deg); } }
+			.section { margin-bottom: 20px; }
 		</style>
-		<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 	</head>
 	<body>
-		<h1>\u26a1 ${title}</h1>
-		<h2>Your Code:</h2>
-		<div class="code">${escapeHtml(code)}</div>
-		<h2>Analysis:</h2>
-		<div class="analysis">${escapeHtml(analysis)}</div>
-		${mermaidCode ? `<h2>Diagram:</h2><div class="mermaid">${mermaidCode}</div>` : ''}
-		<script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+		<div class="loading" id="loading">
+			<div class="spinner" style="animation: spin 1s linear infinite;"></div>
+			<p>Analysing code...</p>
+		</div>
+		<div id="content">
+			<h1>\u26a1 ${escapeHtml(title)}</h1>
+			${metricsHtml}
+			<div class="section">
+				<h2>\ud83d\udcc4 Your Code</h2>
+				<div class="toolbar">
+					<button onclick="copyCode()">\ud83d\udccb Copy Code</button>
+				</div>
+				<div class="code">${escapedCode}</div>
+			</div>
+			<div class="section">
+				<h2>\ud83d\udd0d Analysis</h2>
+				<div class="toolbar">
+					<button onclick="copyAnalysis()">\ud83d\udccb Copy Analysis</button>
+				</div>
+				<div class="analysis">${escapedAnalysis}</div>
+			</div>
+			${mermaidCode ? `<div class="section">
+				<h2>\ud83d\udcca Diagram</h2>
+				<div class="mermaid">${escapeHtml(mermaidCode)}</div>
+			</div>` : ''}
+		</div>
+		<script>
+			const vscode = acquireVsCodeApi();
+			function copyCode() {
+				vscode.postMessage({ command: 'copy', text: ${JSON.stringify(code)} });
+			}
+			function copyAnalysis() {
+				vscode.postMessage({ command: 'copy', text: ${JSON.stringify(analysis)} });
+			}
+		</script>
+		<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+		<script>
+			mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+		</script>
 	</body>
 	</html>`;
 }
 
 function escapeHtml(text: string): string {
-	// Prevent HTML/script injection when showing user-selected code.
 	return text
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')

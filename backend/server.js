@@ -3,15 +3,33 @@ const cors = require("cors");
 require("dotenv").config({ quiet: true });
 
 const app = express();
+// Default to Gemini (the primary AI). Add AbortController for request timeouts.
 const PORT = process.env.PORT || 3001;
+const AI_TIMEOUT = parseInt(process.env.AI_TIMEOUT || '15000', 10);
 
 // Middleware: allow cross-origin requests and JSON request bodies.
 app.use(cors());
 app.use(express.json());
 
 // Quick endpoint to verify that backend is alive.
+// Simple alive-check endpoint.
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "E OPTIMISE server running!" });
+});
+
+// Detailed health endpoint with provider info.
+app.get("/api/health", (req, res) => {
+  const provider = process.env.AI_PROVIDER || 'gemini';
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  res.json({
+    status: 'ok',
+    provider,
+    model,
+    geminiKey: !!process.env.GEMINI_API_KEY,
+    openaiKey: !!process.env.OPENAI_API_KEY,
+    hasFallback: true,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Analyze code time/space complexity using AI.
@@ -54,7 +72,7 @@ app.post("/api/optimise", async (req, res) => {
 // Shared OpenAI helper used by all API routes.
 
 async function callOpenAI(systemPrompt, userPrompt) {
-  const provider = (process.env.AI_PROVIDER || "openai").toLowerCase();
+  const provider = (process.env.AI_PROVIDER || "gemini").toLowerCase();
 
   if (provider === "free" || provider === "local" || provider === "fallback") {
     throw new Error("LOCAL_FALLBACK_ONLY");
@@ -67,77 +85,105 @@ async function callOpenAI(systemPrompt, userPrompt) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY missing!");
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      max_tokens: 800,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    }),
-  });
+    const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT);
 
-  if (!response.ok) {
-    // Include upstream error payload so API clients can debug quickly.
-    const text = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${text}`);
-  }
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        max_tokens: 800,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
 
-  const data = await response.json();
-  if (data.error) throw new Error(data.error.message || "OpenAI API error");
-  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-    throw new Error("Unexpected OpenAI API response format");
+    if (!response.ok) {
+      const text = await response.text();
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || 'unknown';
+        throw new Error(`OpenAI API rate limited (429) — retry after ${retryAfter}s.`);
+      }
+      throw new Error(`OpenAI API error ${response.status}: ${text}`);
+    }
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || "OpenAI API error");
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error("Unexpected OpenAI API response format");
+    }
+    return data.choices[0].message.content;
+  } finally {
+    clearTimeout(timer);
   }
-  return data.choices[0].message.content;
 }
 
 async function callGemini(systemPrompt, userPrompt) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY missing!");
 
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 2000,
-        responseMimeType: "application/json",
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 2000,
+          responseMimeType: "application/json",
+        },
+      }),
+      signal: controller.signal,
+    });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${text}`);
+    if (!response.ok) {
+      const text = await response.text();
+      // Preserve 429 with Retry-After for better UX.
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || 'unknown';
+        throw new Error(`Gemini API rate limited (429) — retry after ${retryAfter}s. Use AI_PROVIDER=free to skip API calls.`);
+      }
+      const lowered = text.toLowerCase();
+      if (lowered.includes('insufficient') || lowered.includes('quota')) {
+        throw new Error('INSUFFICIENT_QUOTA');
+      }
+      throw new Error(`Gemini API error ${response.status}: ${text}`);
+    }
+
+    const data = await response.json();
+    const text =
+      data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") ||
+      "";
+    if (!text) {
+      throw new Error("Unexpected Gemini API response format");
+    }
+
+    return text;
+  } finally {
+    clearTimeout(timer);
   }
-
-  const data = await response.json();
-  const text =
-    data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") ||
-    "";
-  if (!text) {
-    throw new Error("Unexpected Gemini API response format");
-  }
-
-  return text;
 }
 
 function parseModelJson(raw) {
