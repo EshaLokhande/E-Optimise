@@ -7,9 +7,23 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const AI_TIMEOUT = parseInt(process.env.AI_TIMEOUT || '15000', 10);
 
+// Input validation: reject empty/malformed bodies and limit code size.
+function validateCodeInput(req, res, next) {
+  const { code } = req.body || {};
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'No code provided or invalid format' });
+  }
+  if (code.length > 20000) {
+    return res.status(413).json({ error: 'Code too large (max 20,000 chars)' });
+  }
+  req.validatedLanguage = (req.body.language || 'javascript').slice(0, 20);
+  next();
+}
+
 // Middleware: allow cross-origin requests and JSON request bodies.
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50kb' }));
+app.use('/api', validateCodeInput);
 
 // Quick endpoint to verify that backend is alive.
 // Simple alive-check endpoint.
@@ -34,35 +48,32 @@ app.get("/api/health", (req, res) => {
 
 // Analyze code time/space complexity using AI.
 app.post("/api/complexity", async (req, res) => {
-  const { code, language } = req.body;
-  // Reject empty input early.
-  if (!code) return res.status(400).json({ error: "No code provided" });
+  const { code } = req.body;
+  const language = req.validatedLanguage;
   try {
-    const result = await analyzeComplexity(code, language || "javascript");
+    const result = await analyzeComplexity(code, language);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Generate a Mermaid flowchart description for the input code.
 app.post("/api/visualise", async (req, res) => {
-  const { code, language } = req.body;
-  if (!code) return res.status(400).json({ error: "No code provided" });
+  const { code } = req.body;
+  const language = req.validatedLanguage;
   try {
-    const result = await generateDiagram(code, language || "javascript");
+    const result = await generateDiagram(code, language);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Suggest optimized code and explain improvements.
 app.post("/api/optimise", async (req, res) => {
-  const { code, language } = req.body;
-  if (!code) return res.status(400).json({ error: "No code provided" });
+  const { code } = req.body;
+  const language = req.validatedLanguage;
   try {
-    const result = await optimizeCode(code, language || "javascript");
+    const result = await optimizeCode(code, language);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
