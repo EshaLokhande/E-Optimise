@@ -1,21 +1,35 @@
 {
   "name": "e-optimise",
-  "displayName": "e-optimise",
-  "description": "Visualize and optimize your code",
-  "version": "0.0.1",
+  "displayName": "E-Optimise",
+  "description": "Analyze, visualize, and optimize your code with AI — get Big-O notation, Mermaid diagrams, and optimization suggestions.",
+  "version": "0.1.0",
+  "publisher": "irohit373",
   "engines": {
-    "vscode": "^1.109.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
+    "Programming Languages",
+    "Visualization",
     "Other"
   ],
-  "activationEvents": [],
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onCommand:e-optimise.helloWorld"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "e-optimise.helloWorld",
         "title": "E-Optimise: Analyze & Optimize Code"
+      },
+      {
+        "command": "e-optimise.analyzeFile",
+        "title": "E-Optimise: Analyze Entire File"
       }
     ],
     "menus": {
@@ -24,26 +38,41 @@
           "command": "e-optimise.helloWorld",
           "group": "navigation",
           "when": "editorHasSelection"
+        },
+        {
+          "command": "e-optimise.analyzeFile",
+          "group": "navigation"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "e-optimise.helloWorld",
+        "key": "ctrl+shift+e ctrl+shift+a",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "node ./node_modules/typescript/bin/tsc -p ./",
+    "watch": "node ./node_modules/typescript/bin/tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.109.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.54.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.2",
     "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "typescript-eslint": "^8.54.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/irohit373/E-Optimise.git"
   }
 }

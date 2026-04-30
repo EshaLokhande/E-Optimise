@@ -38,12 +38,11 @@ exports.generateDiagram = generateDiagram;
 exports.optimizeCode = optimizeCode;
 exports.generateOptimizationCode = generateOptimizationCode;
 const http = __importStar(require("http"));
-// Generic HTTP helper for backend endpoints.
-// Flow: selected code -> local backend -> OpenAI -> JSON response back to extension.
+const BACKEND_TIMEOUT = parseInt(process.env?.E_OPTIMISE_TIMEOUT || '20000', 10);
+// Generic HTTP helper for backend endpoints with timeout handling.
 async function callBackend(endpoint, code, language) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify({ code, language });
-        // Local backend settings.
         const options = {
             hostname: 'localhost',
             port: 3001,
@@ -54,7 +53,6 @@ async function callBackend(endpoint, code, language) {
                 'Content-Length': Buffer.byteLength(data)
             }
         };
-        // Send POST request and collect streamed response chunks.
         const req = http.request(options, (res) => {
             let body = '';
             res.on('data', chunk => body += chunk);
@@ -62,7 +60,6 @@ async function callBackend(endpoint, code, language) {
                 try {
                     const parsed = JSON.parse(body);
                     const statusCode = res.statusCode || 500;
-                    // Surface backend/OpenAI failures instead of returning empty defaults.
                     if (statusCode >= 400) {
                         reject(new Error(parsed.error || `Backend error ${statusCode}`));
                         return;
@@ -83,19 +80,25 @@ async function callBackend(endpoint, code, language) {
                 }
             });
         });
-        // Usually means backend is not running or port is blocked.
-        req.on('error', () => {
-            reject(new Error('Cannot connect to backend. Is server.js running?'));
+        req.setTimeout(BACKEND_TIMEOUT, () => {
+            req.destroy();
+            reject(new Error('Backend request timed out. Is the server running (port 3001)?'));
+        });
+        req.on('error', (err) => {
+            if (err.code === 'ECONNREFUSED') {
+                reject(new Error('Cannot connect to backend. Start server: cd backend && npm start'));
+            }
+            else {
+                reject(new Error(`Connection error: ${err.message}`));
+            }
         });
         req.write(data);
         req.end();
     });
 }
 async function analyzeCode(code, language = 'javascript') {
-    // /api/complexity returns time/space complexity and suggestions.
     const result = await callBackend('/api/complexity', code, language);
     return {
-        // Keep bigO for backward compatibility with older UI formatting.
         bigO: result.timeComplexity || 'O(n)',
         timeComplexity: result.timeComplexity || 'O(n)',
         spaceComplexity: result.spaceComplexity || 'O(1)',
@@ -105,7 +108,6 @@ async function analyzeCode(code, language = 'javascript') {
     };
 }
 async function generateDiagram(code, language = 'javascript') {
-    // /api/visualise returns Mermaid graph + human explanation.
     const result = await callBackend('/api/visualise', code, language);
     return {
         bigO: '',
@@ -118,7 +120,6 @@ async function generateDiagram(code, language = 'javascript') {
     };
 }
 async function optimizeCode(code, language = 'javascript') {
-    // /api/optimise returns suggested improvements and optimized code.
     const result = await callBackend('/api/optimise', code, language);
     return {
         bigO: '',
@@ -131,7 +132,6 @@ async function optimizeCode(code, language = 'javascript') {
     };
 }
 function generateOptimizationCode(code) {
-    // Placeholder: currently returns original input unchanged.
     return code;
 }
 //# sourceMappingURL=analyzer.js.map
