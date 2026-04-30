@@ -1,7 +1,6 @@
 import * as http from 'http';
 
 // Shared shape used by the extension UI.
-// Not every field is filled by every endpoint.
 export interface CodeAnalysis {
     bigO: string;
     timeComplexity: string;
@@ -14,13 +13,13 @@ export interface CodeAnalysis {
     improvements?: string[];
 }
 
-// Generic HTTP helper for backend endpoints.
-// Flow: selected code -> local backend -> OpenAI -> JSON response back to extension.
+const BACKEND_TIMEOUT = parseInt(process.env?.E_OPTIMISE_TIMEOUT || '20000', 10);
+
+// Generic HTTP helper for backend endpoints with timeout handling.
 async function callBackend(endpoint: string, code: string, language: string): Promise<any> {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify({ code, language });
 
-        // Local backend settings.
         const options = {
             hostname: 'localhost',
             port: 3001,
@@ -32,7 +31,6 @@ async function callBackend(endpoint: string, code: string, language: string): Pr
             }
         };
 
-        // Send POST request and collect streamed response chunks.
         const req = http.request(options, (res) => {
             let body = '';
             res.on('data', chunk => body += chunk);
@@ -41,7 +39,6 @@ async function callBackend(endpoint: string, code: string, language: string): Pr
                     const parsed = JSON.parse(body);
                     const statusCode = res.statusCode || 500;
 
-                    // Surface backend/OpenAI failures instead of returning empty defaults.
                     if (statusCode >= 400) {
                         reject(new Error(parsed.error || `Backend error ${statusCode}`));
                         return;
@@ -64,9 +61,17 @@ async function callBackend(endpoint: string, code: string, language: string): Pr
             });
         });
 
-        // Usually means backend is not running or port is blocked.
-        req.on('error', () => {
-            reject(new Error('Cannot connect to backend. Is server.js running?'));
+        req.setTimeout(BACKEND_TIMEOUT, () => {
+            req.destroy();
+            reject(new Error('Backend request timed out. Is the server running (port 3001)?'));
+        });
+
+        req.on('error', (err: NodeJS.ErrnoException) => {
+            if (err.code === 'ECONNREFUSED') {
+                reject(new Error('Cannot connect to backend. Start server: cd backend && npm start'));
+            } else {
+                reject(new Error(`Connection error: ${err.message}`));
+            }
         });
 
         req.write(data);
@@ -75,10 +80,8 @@ async function callBackend(endpoint: string, code: string, language: string): Pr
 }
 
 export async function analyzeCode(code: string, language: string = 'javascript'): Promise<CodeAnalysis> {
-    // /api/complexity returns time/space complexity and suggestions.
     const result = await callBackend('/api/complexity', code, language);
     return {
-        // Keep bigO for backward compatibility with older UI formatting.
         bigO: result.timeComplexity || 'O(n)',
         timeComplexity: result.timeComplexity || 'O(n)',
         spaceComplexity: result.spaceComplexity || 'O(1)',
@@ -89,7 +92,6 @@ export async function analyzeCode(code: string, language: string = 'javascript')
 }
 
 export async function generateDiagram(code: string, language: string = 'javascript'): Promise<CodeAnalysis> {
-    // /api/visualise returns Mermaid graph + human explanation.
     const result = await callBackend('/api/visualise', code, language);
     return {
         bigO: '',
@@ -103,7 +105,6 @@ export async function generateDiagram(code: string, language: string = 'javascri
 }
 
 export async function optimizeCode(code: string, language: string = 'javascript'): Promise<CodeAnalysis> {
-    // /api/optimise returns suggested improvements and optimized code.
     const result = await callBackend('/api/optimise', code, language);
     return {
         bigO: '',
@@ -117,6 +118,5 @@ export async function optimizeCode(code: string, language: string = 'javascript'
 }
 
 export function generateOptimizationCode(code: string): string {
-    // Placeholder: currently returns original input unchanged.
     return code;
 }
