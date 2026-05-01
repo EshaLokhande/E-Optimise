@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config({ quiet: true });
+const { saveAnalysis, getRecentAnalyses } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +22,7 @@ app.post('/api/complexity', async (req, res) => {
   if (!code) return res.status(400).json({ error: 'No code provided' });
   try {
     const result = await analyzeComplexity(code, language || 'javascript');
+    saveAnalysis(code, language, 'complexity', result);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -33,6 +35,7 @@ app.post('/api/visualise', async (req, res) => {
   if (!code) return res.status(400).json({ error: 'No code provided' });
   try {
     const result = await generateDiagram(code, language || 'javascript');
+     saveAnalysis(code, language, 'visualise', result);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -45,6 +48,7 @@ app.post('/api/optimise', async (req, res) => {
   if (!code) return res.status(400).json({ error: 'No code provided' });
   try {
     const result = await optimizeCode(code, language || 'javascript');
+     saveAnalysis(code, language, 'optimise', result);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -181,9 +185,6 @@ Return ONLY valid JSON, no markdown:
     const raw = await callOpenAI(system, `Language: ${language}\nCode:\n${code}`);
     return parseModelJson(raw);
   } catch (error) {
-    if (shouldFallback(error)) {
-      return localComplexityAnalysis(code, language);
-    }
     throw new Error(`AI returned invalid response: ${error.message || String(error)}`);
   }
 }
@@ -204,9 +205,6 @@ Return ONLY valid JSON, no markdown:
     const raw = await callOpenAI(system, `Language: ${language}\nCode:\n${code}`);
     return parseModelJson(raw);
   } catch (error) {
-    if (shouldFallback(error)) {
-      return localDiagram(code, language);
-    }
     throw new Error(`AI returned invalid response: ${error.message || String(error)}`);
   }
 }
@@ -240,21 +238,18 @@ Use escaped newlines (\\n) inside code strings.
 Required keys: optimisedCode, improvements, complexityBefore, complexityAfter.`;
         const retryRaw = await callOpenAI(retrySystem, `Language: ${language}\nCode:\n${code}`);
         return parseModelJson(retryRaw);
-      } catch {
-        return localOptimization(code);
+      } catch (retryError) {
+        throw new Error(`AI returned invalid response after retry: ${retryError?.message || String(retryError)}`);
       }
-    }
-
-    if (shouldFallback(error)) {
-      return localOptimization(code, language);
     }
     throw new Error(`AI returned invalid response: ${error.message || String(error)}`);
   }
 }
 
 function useLocalFallback() {
-  const provider = (process.env.AI_PROVIDER || '').toLowerCase();
-  return provider === 'free' || provider === 'local' || provider === 'fallback';
+  // Explicit opt-in only: default mode is real AI responses.
+  const mode = String(process.env.RESULT_MODE || 'real').toLowerCase();
+  return mode === 'local';
 }
 
 function shouldFallback(error) {
@@ -358,6 +353,12 @@ function localOptimization(code) {
     complexityAfter: complexity.timeComplexity
   };
 }
+
+app.get('/api/history', (req, res) => {
+  const analyses = getRecentAnalyses();
+  res.json(analyses);
+});
+
 
 // Start HTTP server and print useful local URLs.
 app.listen(PORT, () => {

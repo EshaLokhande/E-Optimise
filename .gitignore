@@ -51,6 +51,9 @@ coverage/
 .nyc_output/
 extension/e-optimise/.vscode-test/
 
+# Ignore local sqlite DB created by backend
+/backend/eoptimise.db
+
 # Misc
 .cache/
 .turbo/
