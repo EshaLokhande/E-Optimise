@@ -18,6 +18,13 @@
         "title": "E-Optimise: Analyze & Optimize Code"
       }
     ],
+    "keybindings": [
+      {
+        "command": "e-optimise.helloWorld",
+        "key": "ctrl+shift+o",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
     "menus": {
       "editor/context": [
         {

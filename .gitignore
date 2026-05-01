@@ -49,6 +49,7 @@ lerna-debug.log*
 # Testing
 coverage/
 .nyc_output/
+extension/e-optimise/.vscode-test/
 
 # Misc
 .cache/
