@@ -18,10 +18,18 @@ db.exec(`
 
 // Save a new analysis
 function saveAnalysis(code, language, type, result) {
-  const stmt = db.prepare(
-    'INSERT INTO analyses (code, language, type, result) VALUES (?, ?, ?, ?)'
-  );
-  return stmt.run(code, language, type, JSON.stringify(result));
+  try {
+    console.log(`[DB] Saving ${type} analysis for ${language}...`);
+    const stmt = db.prepare(
+      'INSERT INTO analyses (code, language, type, result) VALUES (?, ?, ?, ?)'
+    );
+    const res = stmt.run(code, language, type, JSON.stringify(result));
+    console.log(`[DB] Saved with ID: ${res.lastInsertRowid}`);
+    return res;
+  } catch (err) {
+    console.error(`[DB] Save failed: ${err.message}`);
+    throw err;
+  }
 }
 
 // Get all past analyses
@@ -30,8 +38,8 @@ function getAnalyses() {
 }
 
 // Get last 10 analyses
-function getRecentAnalyses() {
-  return db.prepare('SELECT * FROM analyses ORDER BY created_at DESC LIMIT 10').all();
+function getRecentAnalyses(limit = 10) {
+  return db.prepare('SELECT * FROM analyses ORDER BY created_at DESC LIMIT ?').all(limit);
 }
 
 module.exports = { saveAnalysis, getAnalyses, getRecentAnalyses };

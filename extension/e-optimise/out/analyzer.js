@@ -37,6 +37,7 @@ exports.analyzeCode = analyzeCode;
 exports.generateDiagram = generateDiagram;
 exports.optimizeCode = optimizeCode;
 exports.generateOptimizationCode = generateOptimizationCode;
+exports.fetchAnalysisHistory = fetchAnalysisHistory;
 const http = __importStar(require("http"));
 const BACKEND_TIMEOUT = parseInt(process.env?.E_OPTIMISE_TIMEOUT || '20000', 10);
 // Generic HTTP helper for backend endpoints with timeout handling.
@@ -133,5 +134,38 @@ async function optimizeCode(code, language = 'javascript') {
 }
 function generateOptimizationCode(code) {
     return code;
+}
+async function fetchAnalysisHistory(limit = 20) {
+    return new Promise((resolve, reject) => {
+        const req = http.get(`http://localhost:3001/api/analyses?limit=${limit}`, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(body);
+                    if (!Array.isArray(parsed)) {
+                        reject(new Error('Invalid history response from server'));
+                        return;
+                    }
+                    resolve(parsed);
+                }
+                catch {
+                    reject(new Error('Invalid response from server'));
+                }
+            });
+        });
+        req.setTimeout(BACKEND_TIMEOUT, () => {
+            req.destroy();
+            reject(new Error('Backend request timed out. Is the server running (port 3001)?'));
+        });
+        req.on('error', (err) => {
+            if (err.code === 'ECONNREFUSED') {
+                reject(new Error('Cannot connect to backend. Start server: cd backend && npm start'));
+            }
+            else {
+                reject(new Error(`Connection error: ${err.message}`));
+            }
+        });
+    });
 }
 //# sourceMappingURL=analyzer.js.map

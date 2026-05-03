@@ -67,13 +67,23 @@ function activate(context) {
             metrics: `Lines: ${lineCount} | Language: ${language}`
         });
     });
-    context.subscriptions.push(disposable, fileDisposable);
+    let historyDisposable = vscode.commands.registerCommand('e-optimise.viewHistory', async () => {
+        try {
+            const records = await (0, analyzer_1.fetchAnalysisHistory)(20);
+            showHistoryPanel(records);
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`E-Optimise Error: ${error.message}`);
+        }
+    });
+    context.subscriptions.push(disposable, fileDisposable, historyDisposable);
 }
 async function handleAnalysis(code, language, extra) {
     const choice = await vscode.window.showQuickPick([
         { label: '$(lightbulb) Visualise Function', description: 'Generate a Mermaid flowchart of the selected code' },
         { label: '$(symbol-ruler) Get Big-O Notation', description: 'Analyze time & space complexity' },
-        { label: '$(tools) Optimise Function', description: 'Get suggestions and improved code' }
+        { label: '$(tools) Optimise Function', description: 'Get suggestions and improved code' },
+        { label: '$(history) View Analysis History', description: 'View recent analyses stored in SQLite' }
     ], { placeHolder: 'What do you want to do?' });
     if (!choice)
         return;
@@ -111,6 +121,10 @@ async function handleAnalysis(code, language, extra) {
             ].join('\n');
             showPanel(code, analysis, '', 'Optimisation', extra);
         }
+        if (choice.label === '$(history) View Analysis History') {
+            const records = await (0, analyzer_1.fetchAnalysisHistory)(20);
+            showHistoryPanel(records);
+        }
     }
     catch (error) {
         vscode.window.showErrorMessage(`E-Optimise Error: ${error.message}`);
@@ -118,6 +132,49 @@ async function handleAnalysis(code, language, extra) {
     finally {
         statusItem.dispose();
     }
+}
+function showHistoryPanel(records) {
+    const panel = vscode.window.createWebviewPanel('e-optimise-history', 'E-Optimise: Analysis History', vscode.ViewColumn.Beside, { enableScripts: true });
+    const rows = records.map((r) => {
+        let preview = '';
+        try {
+            const parsed = JSON.parse(r.result);
+            preview = JSON.stringify(parsed).slice(0, 180);
+        }
+        catch {
+            preview = String(r.result).slice(0, 180);
+        }
+        return `
+		<tr>
+			<td>${r.id}</td>
+			<td>${escapeHtml(r.type)}</td>
+			<td>${escapeHtml(r.language)}</td>
+			<td>${escapeHtml(r.created_at)}</td>
+			<td><pre>${escapeHtml(preview)}</pre></td>
+		</tr>`;
+    }).join('');
+    panel.webview.html = `<!DOCTYPE html>
+	<html>
+	<head>
+		<meta charset="UTF-8">
+		<style>
+			body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 16px; color: #d4d4d4; background: #1e1e1e; }
+			table { width: 100%; border-collapse: collapse; }
+			th, td { border: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; }
+			th { background: #2d2d30; }
+			pre { margin: 0; white-space: pre-wrap; font-size: 12px; }
+		</style>
+	</head>
+	<body>
+		<h2>Recent Analyses (${records.length})</h2>
+		<table>
+			<thead>
+				<tr><th>ID</th><th>Type</th><th>Language</th><th>Created</th><th>Result Preview</th></tr>
+			</thead>
+			<tbody>${rows || '<tr><td colspan="5">No saved analyses found.</td></tr>'}</tbody>
+		</table>
+	</body>
+	</html>`;
 }
 function showPanel(original, analysis, mermaidCode, title, extra) {
     const panel = vscode.window.createWebviewPanel('e-optimise-analysis', `E-Optimise: ${title}`, vscode.ViewColumn.Beside, { enableScripts: true });

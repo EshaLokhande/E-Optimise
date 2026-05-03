@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config({ quiet: true });
-const { saveAnalysis, getRecentAnalyses } = require("./database");
+const { saveAnalysis, getRecentAnalyses, getAnalyses } = require("./database");
 
 const app = express();
 // Default to Gemini (the primary AI). Add AbortController for request timeouts.
@@ -10,6 +10,11 @@ const AI_TIMEOUT = parseInt(process.env.AI_TIMEOUT || '15000', 10);
 
 // Input validation: reject empty/malformed bodies and limit code size.
 function validateCodeInput(req, res, next) {
+  // Read-only API routes do not require code payloads.
+  if (req.method === "GET") {
+    return next();
+  }
+
   const { code } = req.body || {};
   if (!code || typeof code !== 'string') {
     return res.status(400).json({ error: 'No code provided or invalid format' });
@@ -457,15 +462,14 @@ function localOptimization(code) {
 // Get all past analyses (paginated)
 app.get("/api/analyses", (req, res) => {
   const limit = Number(req.query.limit) || 50;
-  const analyses = getRecentAnalyses();
+  const analyses = getRecentAnalyses(limit);
   res.json(analyses);
 });
 
 // Get a specific analysis by ID
 app.get("/api/analyses/:id", (req, res) => {
-  const { id } = req.params;
-  const analyses = getRecentAnalyses();
-  const analysis = analyses.find((a) => a.id == id);
+  const id = Number(req.params.id);
+  const analysis = getAnalyses().find((a) => a.id === id);
   if (!analysis) {
     return res.status(404).json({ error: "Analysis not found" });
   }

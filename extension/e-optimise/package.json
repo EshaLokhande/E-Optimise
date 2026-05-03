@@ -30,6 +30,10 @@
       {
         "command": "e-optimise.analyzeFile",
         "title": "E-Optimise: Analyze Entire File"
+      },
+      {
+        "command": "e-optimise.viewHistory",
+        "title": "E-Optimise: View Analysis History"
       }
     ],
     "keybindings": [
@@ -37,6 +41,11 @@
         "command": "e-optimise.helloWorld",
         "key": "ctrl+shift+o",
         "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "e-optimise.viewHistory",
+        "key": "ctrl+shift+h",
+        "when": "editorTextFocus"
       }
     ],
     "menus": {
@@ -49,16 +58,13 @@
         {
           "command": "e-optimise.analyzeFile",
           "group": "navigation"
+        },
+        {
+          "command": "e-optimise.viewHistory",
+          "group": "navigation"
         }
       ]
-    },
-    "keybindings": [
-      {
-        "command": "e-optimise.helloWorld",
-        "key": "ctrl+shift+e ctrl+shift+a",
-        "when": "editorTextFocus"
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

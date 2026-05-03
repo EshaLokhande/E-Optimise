@@ -13,6 +13,15 @@ export interface CodeAnalysis {
     improvements?: string[];
 }
 
+export interface SavedAnalysis {
+    id: number;
+    code: string;
+    language: string;
+    type: string;
+    result: string;
+    created_at: string;
+}
+
 const BACKEND_TIMEOUT = parseInt(process.env?.E_OPTIMISE_TIMEOUT || '20000', 10);
 
 // Generic HTTP helper for backend endpoints with timeout handling.
@@ -119,4 +128,38 @@ export async function optimizeCode(code: string, language: string = 'javascript'
 
 export function generateOptimizationCode(code: string): string {
     return code;
+}
+
+export async function fetchAnalysisHistory(limit: number = 20): Promise<SavedAnalysis[]> {
+    return new Promise((resolve, reject) => {
+        const req = http.get(`http://localhost:3001/api/analyses?limit=${limit}`, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(body);
+                    if (!Array.isArray(parsed)) {
+                        reject(new Error('Invalid history response from server'));
+                        return;
+                    }
+                    resolve(parsed as SavedAnalysis[]);
+                } catch {
+                    reject(new Error('Invalid response from server'));
+                }
+            });
+        });
+
+        req.setTimeout(BACKEND_TIMEOUT, () => {
+            req.destroy();
+            reject(new Error('Backend request timed out. Is the server running (port 3001)?'));
+        });
+
+        req.on('error', (err: NodeJS.ErrnoException) => {
+            if (err.code === 'ECONNREFUSED') {
+                reject(new Error('Cannot connect to backend. Start server: cd backend && npm start'));
+            } else {
+                reject(new Error(`Connection error: ${err.message}`));
+            }
+        });
+    });
 }
